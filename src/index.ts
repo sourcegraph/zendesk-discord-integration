@@ -10,13 +10,14 @@ import {
     InteractionType,
 } from 'discord.js'
 import dotenv from 'dotenv'
-import zendesk from 'node-zendesk'
+
+import zendesk from './zendesk'
 
 dotenv.config()
 
 if (
     !process.env.DISCORD_TOKEN ||
-    !process.env.ZENDESK_USERNAME ||
+    !process.env.ZENDESK_EMAIL ||
     !process.env.ZENDESK_TOKEN ||
     !process.env.ZENDESK_REMOTE ||
     !process.env.SUPPORT_CHANNEL_ID
@@ -26,15 +27,13 @@ if (
 }
 
 const channelToTicket = new Map<string, number>()
+const ticketToChannel = new Map<number, string>()
 
-const zendeskClient = zendesk.createClient({
-    // this would be a user's email address
-    username: process.env.ZENDESK_USERNAME,
-    token: process.env.ZENDESK_TOKEN,
-    // this would be https://sourcegraph.zendesk.com/api/v2
-    remoteUri: process.env.ZENDESK_REMOTE,
-    oauth: false,
-})
+const zendeskClient = new zendesk.Client(
+    process.env.ZENDESK_REMOTE,
+    process.env.ZENDESK_TOKEN,
+    process.env.ZENDESK_EMAIL
+)
 
 const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID
 
@@ -44,12 +43,15 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
 })
 
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log(`Logged in as ${client.user!.tag}!`)
     const supportForum = client.channels.resolve(SUPPORT_CHANNEL_ID) as ForumChannel
     for (const tag of supportForum.availableTags) {
         tags.set(tag.name, tag.id)
     }
+
+    // console.log(await zendeskClient.getActivityStream(new Date(1690286234228)))
+    console.log(await zendeskClient.getActivityStream())
 })
 
 client.on('interactionCreate', async interaction => {
@@ -64,6 +66,15 @@ client.on('interactionCreate', async interaction => {
             components: [createActionButtonRow('reopen')],
         })
         await thread.setArchived(true)
+
+        const ticketId = await getTicketFromChannel(interaction.channelId)
+        if (!ticketId) {
+            return
+        }
+
+        await zendeskClient.updateTicket(ticketId, {
+            status: 'closed',
+        })
     }
 
     if (
@@ -76,6 +87,15 @@ client.on('interactionCreate', async interaction => {
         await thread.setArchived(false)
         await interaction.update({
             components: [createActionButtonRow('close')],
+        })
+
+        const ticketId = await getTicketFromChannel(interaction.channelId)
+        if (!ticketId) {
+            return
+        }
+
+        await zendeskClient.updateTicket(ticketId, {
+            status: 'open',
         })
     }
 })
@@ -122,22 +142,27 @@ client.on('threadCreate', async interaction => {
     const starter = await interaction.fetchStarterMessage()
 
     if (starter) {
-        const response = (await zendeskClient.tickets.create({
-            ticket: {
-                subject: interaction.name,
-                comment: {
-                    body: `**${starter.author.username}** ([original message](${starter.url}))\n\n${starter?.content}`,
-                    public: true,
-                },
-                status: 'new',
+        const response = await zendeskClient.createTicket({
+            subject: interaction.name,
+            comment: {
+                body: `**${starter.author.username}** ([original message](${starter.url}))\n\n${starter?.content}`,
+                public: true,
             },
-        })) as any as zendesk.Tickets.ResponseModel
+            status: 'new',
+            followers: [
+                {
+                    action: 'put',
+                    user_email: process.env.ZENDESK_EMAIL!,
+                },
+            ],
+        })
 
         await interaction.send({
             content: `A ticket (ID \`${response.id}\`) has been created for your issue. A support agent will get back to you soon!`,
         })
 
-        channelToTicket.set(starter.channelId, response.id)
+        channelToTicket.set(starter.channelId, response.id!)
+        ticketToChannel.set(response.id!, starter.channelId)
     } else {
         console.error('no starter!')
     }
@@ -168,6 +193,7 @@ async function getTicketFromChannel(channelId: string): Promise<number | null> {
         ticketMessage.content.slice(ticketMessage.content.indexOf('`') + 1, ticketMessage.content.lastIndexOf('`'))
     )
     channelToTicket.set(channelId, ticket)
+    ticketToChannel.set(ticket, channelId)
 
     return ticket
 }
@@ -175,7 +201,11 @@ async function getTicketFromChannel(channelId: string): Promise<number | null> {
 client.on('messageCreate', async interaction => {
     console.log('msg', interaction.content, interaction.thread)
 
-    if (!interaction.channel.isThread() || interaction.channel.parentId !== SUPPORT_CHANNEL_ID) {
+    if (
+        interaction.author.id === client.user!.id ||
+        !interaction.channel.isThread() ||
+        interaction.channel.parentId !== SUPPORT_CHANNEL_ID
+    ) {
         return
     }
 
@@ -184,12 +214,10 @@ client.on('messageCreate', async interaction => {
         return
     }
 
-    await zendeskClient.tickets.update(ticketId, {
-        ticket: {
-            comment: {
-                public: true,
-                body: `**${interaction.author.username}** ([original message](${interaction.url}))\n\n${interaction.content}`,
-            },
+    await zendeskClient.updateTicket(ticketId, {
+        comment: {
+            public: true,
+            body: `**${interaction.author.username}** ([original message](${interaction.url}))\n\n${interaction.content}`,
         },
     })
 })

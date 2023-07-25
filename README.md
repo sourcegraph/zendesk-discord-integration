@@ -18,7 +18,7 @@ Note: Under `Privileged Gateway Intents`, ensure `Server Members Intent` and `Me
 
 Go to your Discord settings, then `Advanced`, and enable `Developer Mode`. Find your forum channel of choice, right click, and click `Copy Channel ID`.
 
-### `ZENDESK_USERNAME`
+### `ZENDESK_EMAIL`
 
 This is the email of a valid Zendesk account. It'll act as the sender of all Discord messages within Zendesk.
 
