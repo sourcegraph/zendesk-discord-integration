@@ -8,6 +8,10 @@ This repository provides a Discord bot that syncs support forum posts with Zende
 
 You'll need to set the following environment variables:
 
+### `SITE`
+
+The site on which you'll be hosting the Zendesk channel server and Discord bot (e.g. `SITE=https://somesubdomain.sourcegraph.com`).
+
 ### `DISCORD_TOKEN`
 
 Go to [the Discord developers page](https://discord.com/developers/applications) and create a new application. Get the token for your bot user under the `Bot` tab.
@@ -29,3 +33,7 @@ You can obtain a Zendesk token via the Zendesk `Admin Center` under `Apps and in
 ### `ZENDESK_REMOTE`
 
 This is the Zendesk API route. In our case, it'll always be `https://sourcegraph.zendesk.com/api/v2`.
+
+## Prior Art / References
+
+- https://github.com/nexmo-saleseng/zendesk-nexmo-channel-integration
