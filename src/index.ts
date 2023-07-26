@@ -1,17 +1,43 @@
 import bodyParser from 'body-parser'
+import {
+    ActionRowBuilder,
+    AnyThreadChannel,
+    ButtonBuilder,
+    ButtonStyle,
+    ChannelType,
+    Client,
+    ComponentType,
+    GatewayIntentBits,
+    InteractionType,
+    MessageType,
+} from 'discord.js'
 import dotenv from 'dotenv'
 import express from 'express'
 
-import { ExternalResource } from './zendesk'
+import { ChannelbackRequest, ExternalResource } from './zendesk'
 
 dotenv.config()
+
+if (
+    !process.env.SITE ||
+    !process.env.DISCORD_TOKEN ||
+    !process.env.ZENDESK_EMAIL ||
+    !process.env.ZENDESK_TOKEN ||
+    !process.env.ZENDESK_REMOTE ||
+    !process.env.SUPPORT_CHANNEL_ID
+) {
+    console.log('bad config')
+    process.exit(1)
+}
 
 const site = process.env.SITE!
 
 const app = express()
 
+let externalResourceQueue: ExternalResource[] = []
+
 app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({ extended: false }))
+app.use(bodyParser.urlencoded({ extended: true }))
 
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/integration_manifest/
@@ -56,44 +82,84 @@ app.post('/admin', (req, res) => {
  */
 app.all('/pull', (req, res) => {
     res.send({
-        external_resources: [
-            {
-                author: {
-                    external_id: 'integrationtestauthor',
-                    name: 'Integration Test Author',
-                    image_url: 'https://media.tenor.com/1MG3j4q4W5AAAAAj/cat-jam.gif',
-                    locale: 'en',
-                    fields: [],
-                },
-                created_at: new Date().toISOString(),
-                external_id: Math.random().toString(36).slice(2),
-                message: 'testing 123',
-                internal_note: false,
-                parent_id: 'integration_test_parent',
-                allow_channelback: true,
-                fields: [
-                    {
-                        id: 'subject',
-                        value: 'Discord Integration Test Issue',
-                    },
-                ],
-            },
-        ] as ExternalResource[],
+        external_resources: externalResourceQueue.splice(0),
     })
 })
 
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/channelback/
  */
-app.post('/channelback', (req, res) => {
-    console.log(req.body)
+app.post('/channelback', async (req, res) => {
+    if (typeof req.body.message !== 'string' || typeof req.body.thread_id !== 'string') {
+        res.status(400).send('Bad request')
+        return
+    }
+
+    const request = req.body as ChannelbackRequest
+
+    const channel = await client.channels.fetch(SUPPORT_CHANNEL_ID)
+    if (channel?.type !== ChannelType.GuildForum) {
+        res.status(500).send('Internal server error')
+        return
+    }
+
+    const thread = await channel.threads.fetch(request.thread_id)
+    if (!thread) {
+        res.status(500).send('Internal server error')
+        return
+    }
+
+    const message = await thread.send({
+        content: request.message,
+        // files: request.file_urls,
+    })
+
+    res.send({
+        external_id: `${thread.id}-${message.id}`,
+        allow_channelback: true,
+    })
 })
 
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/clickthrough_endpoint/
  */
-app.get('/clickthrough', (req, res) => {
-    console.log(req.query)
+app.get('/clickthrough', async (req, res) => {
+    if (typeof req.query.external_id !== 'string') {
+        res.status(400).send('Bad request')
+        return
+    }
+
+    const parts = req.query.external_id.split('-')
+
+    const channel = await client.channels.fetch(SUPPORT_CHANNEL_ID)
+    if (channel?.type !== ChannelType.GuildForum) {
+        res.status(500).send('Internal server error')
+        return
+    }
+
+    if (parts.length === 1) {
+        const thread = await channel.threads.fetch(parts[0])
+        if (!thread?.url) {
+            res.status(500).send('Internal server error')
+            return
+        }
+
+        res.redirect(thread.url)
+    } else {
+        const thread = await channel.threads.fetch(parts[0])
+        if (!thread) {
+            res.status(500).send('Internal server error')
+            return
+        }
+
+        const message = await thread.messages.fetch(parts[1])
+        if (!message.url) {
+            res.status(500).send('Internal server error')
+            return
+        }
+
+        res.redirect(message.url)
+    }
 })
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080
@@ -101,225 +167,140 @@ app.listen(port, () => {
     console.log(`Server listening on port ${port}`)
 })
 
-// import {
-//     ActionRowBuilder,
-//     AnyThreadChannel,
-//     ButtonBuilder,
-//     ButtonStyle,
-//     Client,
-//     ComponentType,
-//     ForumChannel,
-//     GatewayIntentBits,
-//     InteractionType,
-// } from 'discord.js'
+const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID
 
-// import zendesk from './zendesk'
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
+})
 
-// if (
-//     !process.env.DISCORD_TOKEN ||
-//     !process.env.ZENDESK_EMAIL ||
-//     !process.env.ZENDESK_TOKEN ||
-//     !process.env.ZENDESK_REMOTE ||
-//     !process.env.SUPPORT_CHANNEL_ID
-// ) {
-//     console.log('bad config')
-//     process.exit(1)
-// }
+client.on('ready', async () => {
+    console.log(`Logged in as ${client.user!.tag}!`)
+})
 
-// const channelToTicket = new Map<string, number>()
-// const ticketToChannel = new Map<number, string>()
+client.on('interactionCreate', async interaction => {
+    if (
+        interaction.type === InteractionType.MessageComponent &&
+        interaction.componentType === ComponentType.Button &&
+        interaction.customId === 'close'
+    ) {
+        const thread = interaction.message.channel as AnyThreadChannel
 
-// const zendeskClient = new zendesk.Client(
-//     process.env.ZENDESK_REMOTE,
-//     process.env.ZENDESK_TOKEN,
-//     process.env.ZENDESK_EMAIL
-// )
+        await interaction.update({
+            components: [createActionButtonRow('reopen')],
+        })
+        await thread.setArchived(true)
+    }
 
-// const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID
+    if (
+        interaction.type === InteractionType.MessageComponent &&
+        interaction.componentType === ComponentType.Button &&
+        interaction.customId === 'reopen'
+    ) {
+        const thread = interaction.message.channel as AnyThreadChannel
 
-// let tags = new Map<string, string>()
+        await thread.setArchived(false)
+        await interaction.update({
+            components: [createActionButtonRow('close')],
+        })
+    }
+})
 
-// const client = new Client({
-//     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
-// })
+function createActionButtonRow(button: 'close' | 'reopen'): ActionRowBuilder<ButtonBuilder> {
+    const row = new ActionRowBuilder<ButtonBuilder>()
 
-// client.on('ready', async () => {
-//     console.log(`Logged in as ${client.user!.tag}!`)
-//     const supportForum = client.channels.resolve(SUPPORT_CHANNEL_ID) as ForumChannel
-//     for (const tag of supportForum.availableTags) {
-//         tags.set(tag.name, tag.id)
-//     }
+    row.addComponents(
+        button === 'close'
+            ? new ButtonBuilder().setLabel('Close').setCustomId('close').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            : new ButtonBuilder().setLabel('Reopen').setCustomId('reopen').setStyle(ButtonStyle.Primary).setEmoji('🔓'),
+        new ButtonBuilder()
+            .setLabel('Docs')
+            .setStyle(ButtonStyle.Link)
+            .setEmoji('📚')
+            .setURL('https://docs.sourcegraph.com/'),
+        new ButtonBuilder()
+            .setLabel('YouTube')
+            .setStyle(ButtonStyle.Link)
+            .setEmoji('📺')
+            .setURL('https://www.youtube.com/c/sourcegraph'),
+        new ButtonBuilder()
+            .setLabel('Status')
+            .setStyle(ButtonStyle.Link)
+            .setEmoji('🧭')
+            .setURL('https://sourcegraphstatus.com/')
+    )
 
-//     // console.log(await zendeskClient.getActivityStream(new Date(1690286234228)))
-//     console.log(await zendeskClient.getActivityStream())
-// })
+    return row
+}
 
-// client.on('interactionCreate', async interaction => {
-//     if (
-//         interaction.type === InteractionType.MessageComponent &&
-//         interaction.componentType === ComponentType.Button &&
-//         interaction.customId === 'close'
-//     ) {
-//         const thread = interaction.message.channel as AnyThreadChannel
+client.on('threadCreate', async interaction => {
+    if (interaction.parentId !== SUPPORT_CHANNEL_ID) {
+        return
+    }
 
-//         await interaction.update({
-//             components: [createActionButtonRow('reopen')],
-//         })
-//         await thread.setArchived(true)
+    await interaction.send({
+        content: `Hey <@${interaction.ownerId}>, thanks for reaching out! The resources below might be useful to you.`,
+        components: [createActionButtonRow('close')],
+    })
 
-//         const ticketId = await getTicketFromChannel(interaction.channelId)
-//         if (!ticketId) {
-//             return
-//         }
+    const starter = await interaction.fetchStarterMessage()
 
-//         await zendeskClient.updateTicket(ticketId, {
-//             status: 'closed',
-//         })
-//     }
+    if (starter) {
+        externalResourceQueue.push({
+            external_id: interaction.id,
+            author: {
+                external_id: starter.author.id,
+                name: starter.author.username,
+                image_url: starter.author.displayAvatarURL({ size: 512 }),
+                locale: 'en',
+                fields: [],
+            },
+            created_at: new Date(interaction.createdTimestamp ?? Date.now()).toISOString(),
+            message: starter.content,
+            internal_note: false,
+            allow_channelback: true,
+            fields: [
+                {
+                    id: 'subject',
+                    value: interaction.name,
+                },
+            ],
+        })
+    } else {
+        console.error('no starter!')
+    }
+})
 
-//     if (
-//         interaction.type === InteractionType.MessageComponent &&
-//         interaction.componentType === ComponentType.Button &&
-//         interaction.customId === 'reopen'
-//     ) {
-//         const thread = interaction.message.channel as AnyThreadChannel
+client.on('messageCreate', async interaction => {
+    if (
+        // Messages by our bot user
+        interaction.author.id === client.user!.id ||
+        // Messages not in a thread
+        !interaction.channel.isThread() ||
+        // Messages that are thread starters
+        interaction.type === MessageType.ThreadStarterMessage ||
+        // Messages not in the forum we control
+        interaction.channel.parentId !== SUPPORT_CHANNEL_ID ||
+        // Messages that are thread starters but not label thread starters for some reason
+        (await interaction.channel.fetchStarterMessage())?.id === interaction.id
+    ) {
+        return
+    }
 
-//         await thread.setArchived(false)
-//         await interaction.update({
-//             components: [createActionButtonRow('close')],
-//         })
+    externalResourceQueue.push({
+        external_id: `${interaction.channelId}-${interaction.id}`,
+        thread_id: interaction.channelId,
+        author: {
+            external_id: interaction.author.id,
+            name: interaction.author.username,
+            image_url: interaction.author.displayAvatarURL({ size: 512 }),
+            locale: 'en',
+            fields: [],
+        },
+        created_at: new Date(interaction.createdTimestamp).toISOString(),
+        message: interaction.content,
+        internal_note: false,
+        allow_channelback: true,
+    })
+})
 
-//         const ticketId = await getTicketFromChannel(interaction.channelId)
-//         if (!ticketId) {
-//             return
-//         }
-
-//         await zendeskClient.updateTicket(ticketId, {
-//             status: 'open',
-//         })
-//     }
-// })
-
-// function createActionButtonRow(button: 'close' | 'reopen'): ActionRowBuilder<ButtonBuilder> {
-//     const row = new ActionRowBuilder<ButtonBuilder>()
-
-//     row.addComponents(
-//         button === 'close'
-//             ? new ButtonBuilder().setLabel('Close').setCustomId('close').setStyle(ButtonStyle.Danger).setEmoji('🔒')
-//             : new ButtonBuilder().setLabel('Reopen').setCustomId('reopen').setStyle(ButtonStyle.Primary).setEmoji('🔓'),
-//         new ButtonBuilder()
-//             .setLabel('Docs')
-//             .setStyle(ButtonStyle.Link)
-//             .setEmoji('📚')
-//             .setURL('https://docs.sourcegraph.com/'),
-//         new ButtonBuilder()
-//             .setLabel('YouTube')
-//             .setStyle(ButtonStyle.Link)
-//             .setEmoji('📺')
-//             .setURL('https://www.youtube.com/c/sourcegraph'),
-//         new ButtonBuilder()
-//             .setLabel('Status')
-//             .setStyle(ButtonStyle.Link)
-//             .setEmoji('🧭')
-//             .setURL('https://sourcegraphstatus.com/')
-//     )
-
-//     return row
-// }
-
-// client.on('threadCreate', async interaction => {
-//     if (interaction.parentId !== SUPPORT_CHANNEL_ID) {
-//         return
-//     }
-
-//     await interaction.send({
-//         content: `Hey <@${interaction.ownerId}>, thanks for reaching out! The resources below might be useful to you.`,
-//         components: [createActionButtonRow('close')],
-//     })
-
-//     await interaction.setAppliedTags([...interaction.appliedTags, tags.get('New')!])
-
-//     const starter = await interaction.fetchStarterMessage()
-
-//     if (starter) {
-//         const response = await zendeskClient.createTicket({
-//             subject: interaction.name,
-//             comment: {
-//                 body: `**${starter.author.username}** ([original message](${starter.url}))\n\n${starter?.content}`,
-//                 public: true,
-//             },
-//             status: 'new',
-//             followers: [
-//                 {
-//                     action: 'put',
-//                     user_email: process.env.ZENDESK_EMAIL!,
-//                 },
-//             ],
-//         })
-
-//         await interaction.send({
-//             content: `A ticket (ID \`${response.id}\`) has been created for your issue. A support agent will get back to you soon!`,
-//         })
-
-//         channelToTicket.set(starter.channelId, response.id!)
-//         ticketToChannel.set(response.id!, starter.channelId)
-//     } else {
-//         console.error('no starter!')
-//     }
-// })
-
-// async function getTicketFromChannel(channelId: string): Promise<number | null> {
-//     if (channelToTicket.has(channelId)) {
-//         return channelToTicket.get(channelId)!
-//     }
-
-//     const channel = client.channels.resolve(channelId)
-//     if (!channel || !channel.isTextBased() || !channel.isThread()) {
-//         return null
-//     }
-
-//     const messages = await channel.messages.fetch({
-//         limit: 10,
-//     })
-
-//     const ticketMessage = messages.find(
-//         message => message.author.id === client.user!.id && message.content.includes('ticket')
-//     )
-//     if (!ticketMessage) {
-//         return null
-//     }
-
-//     const ticket = parseInt(
-//         ticketMessage.content.slice(ticketMessage.content.indexOf('`') + 1, ticketMessage.content.lastIndexOf('`'))
-//     )
-//     channelToTicket.set(channelId, ticket)
-//     ticketToChannel.set(ticket, channelId)
-
-//     return ticket
-// }
-
-// client.on('messageCreate', async interaction => {
-//     console.log('msg', interaction.content, interaction.thread)
-
-//     if (
-//         interaction.author.id === client.user!.id ||
-//         !interaction.channel.isThread() ||
-//         interaction.channel.parentId !== SUPPORT_CHANNEL_ID
-//     ) {
-//         return
-//     }
-
-//     const ticketId = await getTicketFromChannel(interaction.channelId)
-//     if (!ticketId) {
-//         return
-//     }
-
-//     await zendeskClient.updateTicket(ticketId, {
-//         comment: {
-//             public: true,
-//             body: `**${interaction.author.username}** ([original message](${interaction.url}))\n\n${interaction.content}`,
-//         },
-//     })
-// })
-
-// client.login(process.env.DISCORD_TOKEN)
+client.login(process.env.DISCORD_TOKEN)

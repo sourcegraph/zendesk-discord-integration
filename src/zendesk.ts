@@ -3,6 +3,7 @@ export interface ExternalResource {
     internal_note?: boolean
     message: string
     parent_id?: string
+    thread_id?: string
     created_at: string
     author: Author
     allow_channelback?: boolean
@@ -24,4 +25,10 @@ export interface Field {
      */
     id: string
     value: any
+}
+
+export interface ChannelbackRequest {
+    message: string
+    thread_id: string
+    file_urls?: string[]
 }
