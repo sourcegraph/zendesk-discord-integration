@@ -127,7 +127,7 @@ export function createBot(params: BotParams): Bot {
                     fields: [],
                 },
                 created_at: new Date(interaction.createdTimestamp ?? Date.now()).toISOString(),
-                message: starter.content,
+                message: starter.content || '*No message content*',
                 internal_note: false,
                 allow_channelback: true,
                 fields: [
@@ -172,7 +172,7 @@ export function createBot(params: BotParams): Bot {
                 fields: [],
             },
             created_at: new Date(interaction.createdTimestamp).toISOString(),
-            message: interaction.content,
+            message: interaction.content || '*No message content*',
             internal_note: false,
             allow_channelback: true,
             file_urls: interaction.attachments.map(

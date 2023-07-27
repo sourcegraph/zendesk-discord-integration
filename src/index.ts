@@ -51,6 +51,7 @@ app.get('/manifest.json', (req, res) => {
         author: 'Auguste Rame',
         version: 'v0.0.1',
         channelback_files: true,
+        push_client_id: process.env.PUSH,
         urls: {
             admin_ui: `${site}/admin`,
             pull_url: `${site}/pull`,
@@ -85,12 +86,24 @@ app.post('/admin', (req, res) => {
             name: req.body.name,
             metadata,
             return_url: req.body.return_url,
+
+            push: {
+                subdomain: req.body.subdomain,
+                instance_push_id: req.body.instance_push_id,
+                zendesk_access_token: req.body.zendesk_access_token,
+            },
         })
     } else {
         res.render('admin.ejs', {
             name: '',
             metadata: {},
             return_url: req.body.return_url,
+
+            push: {
+                subdomain: req.body.subdomain,
+                instance_push_id: req.body.instance_push_id,
+                zendesk_access_token: req.body.zendesk_access_token,
+            },
         })
     }
 })
@@ -129,7 +142,22 @@ app.all('/pull', (req, res) => {
                 token: metadata.token,
                 supportChannelId: metadata.channel,
                 async pushExternalResource(resource: ExternalResource): Promise<void> {
-                    botExternalResourceQueue.get(metadata.uuid)!.push(resource)
+                    if (process.env.PUSH && metadata.zendesk_access_token) {
+                        axios.post(
+                            `https://${metadata.subdomain}.zendesk.com/api/v2/any_channel/push`,
+                            {
+                                instance_push_id: metadata.instance_push_id,
+                                external_resources: [resource],
+                            },
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${metadata.zendesk_access_token}`,
+                                },
+                            }
+                        )
+                    } else {
+                        botExternalResourceQueue.get(metadata.uuid)!.push(resource)
+                    }
                 },
             })
         )

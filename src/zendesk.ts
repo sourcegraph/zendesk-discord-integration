@@ -50,4 +50,9 @@ export interface Metadata {
      * Discord forum channel
      */
     channel: string
+
+    // Push data
+    subdomain: string
+    instance_push_id: string
+    zendesk_access_token: string
 }
