@@ -50,7 +50,7 @@ app.get('/manifest.json', (req, res) => {
         id: site,
         author: 'Auguste Rame',
         version: 'v0.0.1',
-        channelback_files: true,
+        channelback_files: !!process.env.PUSH,
         push_client_id: process.env.PUSH,
         urls: {
             admin_ui: `${site}/admin`,
@@ -134,14 +134,21 @@ app.all('/pull', (req, res) => {
         return
     }
 
+    if (bots.has(metadata.uuid) && bots.get(metadata.uuid)!.params.metadata.token !== metadata.token) {
+        bots.get(metadata.uuid)?.destroy()
+        bots.delete(metadata.uuid)
+    }
+
     if (!bots.has(metadata.uuid)) {
-        botExternalResourceQueue.set(metadata.uuid, [])
+        if (!botExternalResourceQueue.has(metadata.uuid)) {
+            botExternalResourceQueue.set(metadata.uuid, [])
+        }
+
         bots.set(
             metadata.uuid,
             createBot({
-                token: metadata.token,
-                supportChannelId: metadata.channel,
-                async pushExternalResource(resource: ExternalResource): Promise<void> {
+                metadata,
+                async pushExternalResource(metadata: Metadata, resource: ExternalResource): Promise<void> {
                     if (process.env.PUSH && metadata.zendesk_access_token) {
                         axios.post(
                             `https://${metadata.subdomain}.zendesk.com/api/v2/any_channel/push`,
@@ -163,8 +170,7 @@ app.all('/pull', (req, res) => {
         )
         console.log(`Configured bot that handles channel #${metadata.channel}`)
     } else {
-        bots.get(metadata.uuid)!.params.token = metadata.token
-        bots.get(metadata.uuid)!.params.supportChannelId = metadata.channel
+        bots.get(metadata.uuid)!.params.metadata = metadata
     }
 
     res.send({
@@ -179,17 +185,30 @@ app.post('/channelback', async (req, res) => {
     if (
         typeof req.body.message !== 'string' ||
         typeof req.body.thread_id !== 'string' ||
-        typeof req.body.metadata !== 'string' ||
-        // Check metadata characteristics
-        typeof req.body.metadata.uuid !== 'string' ||
-        typeof req.body.metadata.token !== 'string' ||
-        typeof req.body.metadata.channel !== 'string'
+        typeof req.body.metadata !== 'string'
     ) {
         res.status(400).send('Bad request')
         return
     }
 
-    const bot = bots.get(req.body.metadata.uuid)
+    let metadata: Metadata
+    try {
+        metadata = JSON.parse(req.body.metadata)
+    } catch {
+        res.status(400).send('Bad request')
+        return
+    }
+
+    if (
+        typeof metadata.uuid !== 'string' ||
+        typeof metadata.token !== 'string' ||
+        typeof metadata.channel !== 'string'
+    ) {
+        res.status(400).send('Bad request')
+        return
+    }
+
+    const bot = bots.get(metadata.uuid)
     if (!bot) {
         res.status(500).send('Internal server error')
         return

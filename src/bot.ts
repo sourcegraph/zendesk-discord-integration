@@ -1,6 +1,10 @@
+import path from 'path'
+
+import axios from 'axios'
 import {
     ActionRowBuilder,
     AnyThreadChannel,
+    AttachmentBuilder,
     ButtonBuilder,
     ButtonStyle,
     ChannelType,
@@ -11,15 +15,14 @@ import {
     MessageType,
 } from 'discord.js'
 
-import { ChannelbackRequest, ClickthroughRequest, ExternalResource } from './zendesk'
+import { ChannelbackRequest, ClickthroughRequest, ExternalResource, Metadata } from './zendesk'
 
 interface BotParams {
-    token: string
-    supportChannelId: string
+    metadata: Metadata
     /**
      * Either immediately pushes or queues up external resources to be sent to Zendesk
      */
-    pushExternalResource: (resource: ExternalResource) => Promise<void>
+    pushExternalResource: (metadata: Metadata, resource: ExternalResource) => Promise<void>
 }
 
 export interface Bot {
@@ -34,6 +37,8 @@ export interface Bot {
      * Handles a ClickthroughRequest, returning the new clickthrough URL to be redirect to
      */
     clickthrough(request: ClickthroughRequest): Promise<string | null>
+
+    destroy(): void
 }
 
 export function createBot(params: BotParams): Bot {
@@ -56,6 +61,7 @@ export function createBot(params: BotParams): Bot {
             await interaction.update({
                 components: [createActionButtonRow('reopen')],
             })
+
             await thread.setArchived(true)
         }
 
@@ -105,7 +111,7 @@ export function createBot(params: BotParams): Bot {
     }
 
     client.on('threadCreate', async interaction => {
-        if (interaction.parentId !== params.supportChannelId) {
+        if (interaction.parentId !== params.metadata.channel) {
             return
         }
 
@@ -117,7 +123,7 @@ export function createBot(params: BotParams): Bot {
         const starter = await interaction.fetchStarterMessage()
 
         if (starter) {
-            await params.pushExternalResource({
+            await params.pushExternalResource(params.metadata, {
                 external_id: interaction.id,
                 author: {
                     external_id: starter.author.id,
@@ -154,14 +160,14 @@ export function createBot(params: BotParams): Bot {
             // Messages that are thread starters
             interaction.type === MessageType.ThreadStarterMessage ||
             // Messages not in the forum we control
-            interaction.channel.parentId !== params.supportChannelId ||
+            interaction.channel.parentId !== params.metadata.channel ||
             // Messages that are thread starters but not label thread starters for some reason
             (await interaction.channel.fetchStarterMessage())?.id === interaction.id
         ) {
             return
         }
 
-        await params.pushExternalResource({
+        await params.pushExternalResource(params.metadata, {
             external_id: `${interaction.channelId}-${interaction.id}`,
             thread_id: interaction.channelId,
             author: {
@@ -181,13 +187,13 @@ export function createBot(params: BotParams): Bot {
         })
     })
 
-    client.login(params.token)
+    client.login(params.metadata.token)
 
     return {
         params,
 
         async channelback(request: ChannelbackRequest): Promise<string | null> {
-            const channel = await client.channels.fetch(params.supportChannelId)
+            const channel = await client.channels.fetch(params.metadata.channel)
             if (channel?.type !== ChannelType.GuildForum) {
                 return null
             }
@@ -197,9 +203,25 @@ export function createBot(params: BotParams): Bot {
                 return null
             }
 
+            const attachmentData = await Promise.all(
+                (request.file_urls || []).map(url =>
+                    axios.get(url, {
+                        responseType: 'arraybuffer',
+                        headers: {
+                            Authorization: `Bearer ${params.metadata.zendesk_access_token}`,
+                        },
+                    })
+                )
+            )
+
             const message = await thread.send({
                 content: request.message,
-                files: request.file_urls,
+                files: (request.file_urls || []).map(
+                    (url, index) =>
+                        new AttachmentBuilder(attachmentData[index].data, {
+                            name: path.basename(url),
+                        })
+                ),
             })
 
             return `${thread.id}-${message.id}`
@@ -208,7 +230,7 @@ export function createBot(params: BotParams): Bot {
         async clickthrough(request: ClickthroughRequest): Promise<string | null> {
             const parts = request.external_id.split('-')
 
-            const channel = await client.channels.fetch(params.supportChannelId)
+            const channel = await client.channels.fetch(params.metadata.channel)
             if (channel?.type !== ChannelType.GuildForum) {
                 return null
             }
@@ -233,6 +255,10 @@ export function createBot(params: BotParams): Bot {
 
                 return message.url
             }
+        },
+
+        destroy() {
+            client.destroy()
         },
     }
 }

@@ -54,7 +54,9 @@
                 />
                 <div id="channel-err" class="c-chk__message c-txt__message--error">This field is required!</div>
             </div>
-            <button class="c-btn c-btn--primary" id="create-account">Create Account</button>
+            <button class="c-btn c-btn--primary" id="create-account">
+                <%= metadata.channel ? "Create" : "Update" %> Account
+            </button>
         </div>
 
         <form action="<%= return_url %>" method="post" style="display: none">
