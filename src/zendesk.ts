@@ -32,3 +32,22 @@ export interface ChannelbackRequest {
     thread_id: string
     file_urls?: string[]
 }
+
+export interface ClickthroughRequest {
+    external_id: string
+}
+
+export interface Metadata {
+    /**
+     * Unique identifier for bot identication
+     */
+    uuid: string
+    /**
+     * Discord token
+     */
+    token: string
+    /**
+     * Discord forum channel
+     */
+    channel: string
+}

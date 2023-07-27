@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <link
+            href="//cdn.jsdelivr.net/combine/npm/@zendeskgarden/css-bedrock,npm/@zendeskgarden/css-grid,npm/@zendeskgarden/css-buttons,npm/@zendeskgarden/css-forms,npm/@zendeskgarden/css-utilities"
+            rel="stylesheet"
+        />
+
+        <style>
+            .c-txt__message--error {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="col">
+            <div class="c-txt u-mb-sm">
+                <label class="c-txt__label" for="name">Account Name</label>
+                <small class="c-txt__hint"
+                    >Name of the Zendesk integration account that will be displayed in tickets created by this
+                    channel.</small
+                >
+                <input class="c-txt__input" id="name" placeholder="Name" type="text" value="<%= name %>" required />
+                <div id="name-err" class="c-chk__message c-txt__message--error">This field is required!</div>
+            </div>
+            <div class="c-txt u-mb-sm">
+                <label class="c-txt__label" for="token">Discord Token</label>
+                <small class="c-txt__hint"
+                    >Please provide a Discord token for the Discord bot you've created for this integration.</small
+                >
+                <input
+                    class="c-txt__input"
+                    id="token"
+                    placeholder="Token"
+                    type="password"
+                    value="<%= metadata.token %>"
+                    required
+                />
+                <div id="token-err" class="c-chk__message c-txt__message--error">This field is required!</div>
+            </div>
+            <div class="c-txt u-mb-sm">
+                <label class="c-txt__label" for="channel">Channel</label>
+                <small class="c-txt__hint"
+                    >Please provide the ID of the forum channel you'd like this account to monitor.</small
+                >
+                <input
+                    class="c-txt__input"
+                    id="channel"
+                    placeholder="ID"
+                    type="text"
+                    value="<%= metadata.channel %>"
+                    required
+                />
+                <div id="channel-err" class="c-chk__message c-txt__message--error">This field is required!</div>
+            </div>
+            <button class="c-btn c-btn--primary" id="create-account">Create Account</button>
+        </div>
+
+        <form action="<%= return_url %>" method="post" style="display: none">
+            <input name="name" />
+            <input name="metadata" />
+            <input name="state" value="" />
+
+            <input type="submit" />
+        </form>
+
+        <script>
+            document.getElementById('create-account').addEventListener("click", () => {
+                let invalid = false
+                for (const field of ['name', 'token', 'channel']) {
+                    if (document.getElementById(field).value.trim() === '') {
+                        document.getElementById(field).classList.add('c-txt__input--error')
+                        document.getElementById(`${field}-err`).style.display = 'inline-block';
+                        invalid = true
+                    } else {
+                        document.getElementById(field).classList.remove('c-txt__input--error')
+                        document.getElementById(`${field}-err`).style.display = 'none';
+                    }
+                }
+
+                if (invalid) {
+                    return
+                }
+
+                document.querySelector('form>input[name="name"]').value = document.getElementById('name').value
+                document.querySelector('form>input[name="metadata"]').value = JSON.stringify({
+                    uuid: <%- metadata.uuid ? `'${metadata.uuid}'` : 'crypto.randomUUID()' %>,
+                    token: document.getElementById('token').value,
+                    channel: document.getElementById('channel').value,
+                })
+                document.querySelector('form').submit()
+            })
+        </script>
+    </body>
+</html>
