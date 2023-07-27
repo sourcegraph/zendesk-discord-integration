@@ -88,6 +88,10 @@
                     uuid: <%- metadata.uuid ? `'${metadata.uuid}'` : 'crypto.randomUUID()' %>,
                     token: document.getElementById('token').value,
                     channel: document.getElementById('channel').value,
+
+                    subdomain: <%- push.subdomain ? `'${push.subdomain}'` : 'undefined' %>,
+                    instance_push_id: <%- push.instance_push_id ? `'${push.instance_push_id}'` : 'undefined' %>,
+                    zendesk_access_token: <%- push.zendesk_access_token ? `'${push.zendesk_access_token}'` : 'undefined' %>,
                 })
                 document.querySelector('form').submit()
             })
