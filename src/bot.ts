@@ -23,6 +23,8 @@ interface BotParams {
 }
 
 export interface Bot {
+    params: BotParams
+
     /**
      * Handles a ChannelbackRequest, returning the new channeled message's external id
      */
@@ -134,6 +136,9 @@ export function createBot(params: BotParams): Bot {
                         value: interaction.name,
                     },
                 ],
+                file_urls: starter.attachments.map(
+                    attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
+                ),
             })
         } else {
             console.error('no starter!')
@@ -170,12 +175,17 @@ export function createBot(params: BotParams): Bot {
             message: interaction.content,
             internal_note: false,
             allow_channelback: true,
+            file_urls: interaction.attachments.map(
+                attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
+            ),
         })
     })
 
     client.login(params.token)
 
     return {
+        params,
+
         async channelback(request: ChannelbackRequest): Promise<string | null> {
             const channel = await client.channels.fetch(params.supportChannelId)
             if (channel?.type !== ChannelType.GuildForum) {

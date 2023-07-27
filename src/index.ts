@@ -1,3 +1,4 @@
+import axios from 'axios'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
 import express from 'express'
@@ -25,6 +26,19 @@ let botExternalResourceQueue = new Map<string, ExternalResource[]>()
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
+app.all('/attachment/(*)', async (req, res) => {
+    try {
+        const { data } = await axios.get(req.params[0], {
+            responseType: 'stream',
+            timeout: 10_000,
+        })
+        data.pipe(res)
+    } catch {
+        res.status(500).send('Internal server error')
+        return
+    }
+})
+
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/integration_manifest/
  */
@@ -46,17 +60,39 @@ app.get('/manifest.json', (req, res) => {
     })
 })
 
-app.get('/preview-create-account', (req, res) => {
-    res.render('create-account.ejs', {
-        return_url: '#',
-    })
-})
-
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/administrative_interface/
  */
 app.post('/admin', (req, res) => {
-    res.render('create-account.ejs', { return_url: req.body.return_url })
+    if (
+        typeof req.body.return_url !== 'string' ||
+        (typeof req.body.name && (typeof req.body.name !== 'string' || typeof req.body.metadata !== 'string'))
+    ) {
+        res.status(400).send('Bad request')
+        return
+    }
+
+    if (req.body.name) {
+        let metadata: Metadata
+        try {
+            metadata = JSON.parse(req.body.metadata)
+        } catch {
+            res.status(400).send('Bad request')
+            return
+        }
+
+        res.render('admin.ejs', {
+            name: req.body.name,
+            metadata,
+            return_url: req.body.return_url,
+        })
+    } else {
+        res.render('admin.ejs', {
+            name: '',
+            metadata: {},
+            return_url: req.body.return_url,
+        })
+    }
 })
 
 /**
@@ -98,6 +134,9 @@ app.all('/pull', (req, res) => {
             })
         )
         console.log(`Configured bot that handles channel #${metadata.channel}`)
+    } else {
+        bots.get(metadata.uuid)!.params.token = metadata.token
+        bots.get(metadata.uuid)!.params.supportChannelId = metadata.channel
     }
 
     res.send({
