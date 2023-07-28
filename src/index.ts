@@ -171,6 +171,7 @@ app.all('/pull', async (req, res) => {
         console.log(`Configured bot that handles channel #${metadata.channel}`)
     } else {
         bots.get(metadata.uuid)!.params.metadata = metadata
+        await bots.get(metadata.uuid)!.onUpdateParams()
     }
 
     res.send({

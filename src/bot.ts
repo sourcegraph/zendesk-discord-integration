@@ -55,6 +55,7 @@ export interface Bot {
      */
     clickthrough(request: ClickthroughRequest): Promise<string | null>
 
+    onUpdateParams(): Promise<void>
     destroy(): void
 }
 
@@ -63,17 +64,20 @@ export async function createBot(params: BotParams): Promise<Bot> {
         intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
     })
 
-    if (qdrantClient) {
-        const collectionNames = (await qdrantClient.getCollections()).collections.map(collection => collection.name)
-        if (!collectionNames.includes(`${params.metadata.uuid}-${params.metadata.channel}`)) {
-            qdrantClient.createCollection(`${params.metadata.uuid}-${params.metadata.channel}`, {
-                vectors: {
-                    size: 1536,
-                    distance: 'Cosine',
-                },
-            })
+    async function onUpdateParams() {
+        if (qdrantClient) {
+            const collectionNames = (await qdrantClient.getCollections()).collections.map(collection => collection.name)
+            if (!collectionNames.includes(params.metadata.channel)) {
+                qdrantClient.createCollection(params.metadata.channel, {
+                    vectors: {
+                        size: 1536,
+                        distance: 'Cosine',
+                    },
+                })
+            }
         }
     }
+    await onUpdateParams()
 
     client.on('ready', async () => {
         console.log(`Logged in as ${client.user!.tag}!`)
@@ -124,11 +128,6 @@ export async function createBot(params: BotParams): Promise<Bot> {
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('📚')
                 .setURL('https://docs.sourcegraph.com/'),
-            new ButtonBuilder()
-                .setLabel('YouTube')
-                .setStyle(ButtonStyle.Link)
-                .setEmoji('📺')
-                .setURL('https://www.youtube.com/c/sourcegraph'),
             new ButtonBuilder()
                 .setLabel('Status')
                 .setStyle(ButtonStyle.Link)
@@ -184,7 +183,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
                 ${starter.content}`,
                 })
 
-                const results = await qdrantClient?.search(`${params.metadata.uuid}-${params.metadata.channel}`, {
+                const results = await qdrantClient?.search(params.metadata.channel, {
                     vector: response.data.data[0].embedding,
                     limit: 5,
                 })
@@ -193,20 +192,20 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     results.map(result => interaction.parent!.threads.resolve(result.payload!.discord_id as string))
                 )
                 await interaction.send({
-                    content: 'These other threads might be useful to you:',
+                    content: 'These other threads might be relevant:',
                     components: threads
                         .filter(_ => _ !== null)
-                        .map((thread, index) =>
+                        .map(thread =>
                             new ActionRowBuilder<ButtonBuilder>().addComponents(
                                 new ButtonBuilder()
-                                    .setLabel(`${thread!.name} (${(results[index].score * 100).toFixed(2)}% match)`)
+                                    .setLabel(thread!.name)
                                     .setStyle(ButtonStyle.Link)
                                     .setURL(thread!.url)
                             )
                         ),
                 })
 
-                qdrantClient.upsert(`${params.metadata.uuid}-${params.metadata.channel}`, {
+                qdrantClient.upsert(params.metadata.channel, {
                     wait: false,
                     points: [
                         {
@@ -330,6 +329,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
             }
         },
 
+        onUpdateParams,
         destroy() {
             client.destroy()
         },
