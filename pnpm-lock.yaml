@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@qdrant/js-client-rest':
+    specifier: ^1.3.0
+    version: 1.3.0(typescript@5.1.6)
   axios:
     specifier: ^1.4.0
     version: 1.4.0
@@ -23,6 +26,9 @@ dependencies:
   express:
     specifier: ^4.18.2
     version: 4.18.2
+  openai:
+    specifier: ^3.3.0
+    version: 3.3.0
 
 devDependencies:
   '@ianvs/prettier-plugin-sort-imports':
@@ -386,6 +392,23 @@ packages:
       '@jridgewell/sourcemap-codec': 1.4.15
     dev: true
 
+  /@qdrant/js-client-rest@1.3.0(typescript@5.1.6):
+    resolution: {integrity: sha512-qlJkjR0/cmnvgVvIS71r+aKWW79Q9gMT7r7oNLHzloYoZel1IwF7S0gXhrk1JIsbVSvbz+DTlK5KClE9X0ZFTQ==}
+    engines: {node: '>=18.0.0', pnpm: '>=8'}
+    peerDependencies:
+      typescript: '>=4.1'
+    dependencies:
+      '@qdrant/openapi-typescript-fetch': 1.2.1
+      '@sevinf/maybe': 0.5.0
+      typescript: 5.1.6
+      undici: 5.22.1
+    dev: false
+
+  /@qdrant/openapi-typescript-fetch@1.2.1:
+    resolution: {integrity: sha512-oiBJRN1ME7orFZocgE25jrM3knIF/OKJfMsZPBbtMMKfgNVYfps0MokGvSJkBmecj6bf8QoLXWIGlIoaTM4Zmw==}
+    engines: {node: '>=12.0.0', pnpm: '>=8'}
+    dev: false
+
   /@sapphire/async-queue@1.5.0:
     resolution: {integrity: sha512-JkLdIsP8fPAdh9ZZjrbHWR/+mZj0wvKS5ICibcLrRI1j84UmLMshx5n9QmL8b95d4onJ2xxiyugTgSAX7AalmA==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
@@ -402,6 +425,10 @@ packages:
   /@sapphire/snowflake@3.5.1:
     resolution: {integrity: sha512-BxcYGzgEsdlG0dKAyOm0ehLGm2CafIrfQTZGWgkfKYbj+pNNsorZ7EotuZukc2MT70E0UbppVbtpBrqpzVzjNA==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
+    dev: false
+
+  /@sevinf/maybe@0.5.0:
+    resolution: {integrity: sha512-ARhyoYDnY1LES3vYI0fiG6e9esWfTNcXcO6+MPJJXcnyMV3bim4lnFt45VXouV7y82F4x3YH8nOQ6VztuvUiWg==}
     dev: false
 
   /@sourcegraph/prettierrc@3.0.3:
@@ -565,6 +592,14 @@ packages:
 
   /asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
+    dev: false
+
+  /axios@0.26.1:
+    resolution: {integrity: sha512-fPwcX4EvnSHuInCMItEhAGnaSEXRBjtzh9fOtsE6E1G6p7vl7edEeZe11QHf18+6+9gR5PbKV/sGKNaD8YaMeA==}
+    dependencies:
+      follow-redirects: 1.15.2
+    transitivePeerDependencies:
+      - debug
     dev: false
 
   /axios@1.4.0:
@@ -1199,6 +1234,15 @@ packages:
       ee-first: 1.1.1
     dev: false
 
+  /openai@3.3.0:
+    resolution: {integrity: sha512-uqxI/Au+aPRnsaQRe8CojU0eCR7I0mBiKjD3sNMzY6DaC1ZVrc85u98mtJW6voDug8fgGN+DIZmTDxTthxb7dQ==}
+    dependencies:
+      axios: 0.26.1
+      form-data: 4.0.0
+    transitivePeerDependencies:
+      - debug
+    dev: false
+
   /pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
     dev: true
@@ -1490,7 +1534,6 @@ packages:
     resolution: {integrity: sha512-zaWCozRZ6DLEWAWFrVDz1H6FVXzUSfTy5FUMWsQlU8Ym5JP9eO4xkTIROFCQvhQf61z6O/G6ugw3SgAnvvm+HA==}
     engines: {node: '>=14.17'}
     hasBin: true
-    dev: true
 
   /undici@5.22.1:
     resolution: {integrity: sha512-Ji2IJhFXZY0x/0tVBXeQwgPlLWw13GVzpsWPQ3rV50IFMMof2I55PZZxtm4P6iNq+L5znYN9nSTAq0ZyE6lSJw==}

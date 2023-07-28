@@ -111,7 +111,7 @@ app.post('/admin', (req, res) => {
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/pull_endpoint/
  */
-app.all('/pull', (req, res) => {
+app.all('/pull', async (req, res) => {
     if (typeof req.body.metadata !== 'string') {
         res.status(400).send('Bad request')
         return
@@ -146,7 +146,7 @@ app.all('/pull', (req, res) => {
 
         bots.set(
             metadata.uuid,
-            createBot({
+            await createBot({
                 metadata,
                 async pushExternalResource(metadata: Metadata, resource: ExternalResource): Promise<void> {
                     if (process.env.PUSH && metadata.zendesk_access_token) {

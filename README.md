@@ -44,6 +44,15 @@ Note: Under `Privileged Gateway Intents`, ensure `Server Members Intent` and `Me
 
 Go to your Discord settings, then `Advanced`, and enable `Developer Mode`. Find your forum channel of choice, right click, and click `Copy Channel ID`.
 
+## Testing
+
+```bash
+docker pull qdrant/qdrant
+docker run -p 6333:6333 \
+    -v ~/.drant-data:/qdrant/storage \
+    qdrant/qdrant
+```
+
 ## Prior Art / References
 
 - https://github.com/nexmo-saleseng/zendesk-nexmo-channel-integration

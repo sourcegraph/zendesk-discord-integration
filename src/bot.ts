@@ -1,5 +1,6 @@
 import path from 'path'
 
+import { QdrantClient } from '@qdrant/js-client-rest'
 import axios from 'axios'
 import {
     ActionRowBuilder,
@@ -14,8 +15,24 @@ import {
     InteractionType,
     MessageType,
 } from 'discord.js'
+import dotenv from 'dotenv'
+import { Configuration, OpenAIApi } from 'openai'
 
 import { ChannelbackRequest, ClickthroughRequest, ExternalResource, Metadata } from './zendesk'
+
+dotenv.config()
+
+const qdrantClient: QdrantClient | null = process.env.QDRANT_URL
+    ? new QdrantClient({ url: process.env.QDRANT_URL })
+    : null
+
+const openaiClient: OpenAIApi | null = process.env.OPENAI_KEY
+    ? new OpenAIApi(
+          new Configuration({
+              apiKey: process.env.OPENAI_KEY,
+          })
+      )
+    : null
 
 interface BotParams {
     metadata: Metadata
@@ -41,10 +58,22 @@ export interface Bot {
     destroy(): void
 }
 
-export function createBot(params: BotParams): Bot {
+export async function createBot(params: BotParams): Promise<Bot> {
     const client = new Client({
         intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
     })
+
+    if (qdrantClient) {
+        const collectionNames = (await qdrantClient.getCollections()).collections.map(collection => collection.name)
+        if (!collectionNames.includes(`${params.metadata.uuid}-${params.metadata.channel}`)) {
+            qdrantClient.createCollection(`${params.metadata.uuid}-${params.metadata.channel}`, {
+                vectors: {
+                    size: 1536,
+                    distance: 'Cosine',
+                },
+            })
+        }
+    }
 
     client.on('ready', async () => {
         console.log(`Logged in as ${client.user!.tag}!`)
@@ -146,6 +175,50 @@ export function createBot(params: BotParams): Bot {
                     attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
                 ),
             })
+
+            if (qdrantClient && openaiClient) {
+                const response = await openaiClient.createEmbedding({
+                    model: 'text-embedding-ada-002',
+                    input: `# ${interaction.name}
+                
+                ${starter.content}`,
+                })
+
+                const results = await qdrantClient?.search(`${params.metadata.uuid}-${params.metadata.channel}`, {
+                    vector: response.data.data[0].embedding,
+                    limit: 5,
+                })
+
+                const threads = await Promise.all(
+                    results.map(result => interaction.parent!.threads.resolve(result.payload!.discord_id as string))
+                )
+                await interaction.send({
+                    content: 'These other threads might be useful to you:',
+                    components: threads
+                        .filter(_ => _ !== null)
+                        .map((thread, index) =>
+                            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                                new ButtonBuilder()
+                                    .setLabel(`${thread!.name} (${(results[index].score * 100).toFixed(2)}% match)`)
+                                    .setStyle(ButtonStyle.Link)
+                                    .setURL(thread!.url)
+                            )
+                        ),
+                })
+
+                qdrantClient.upsert(`${params.metadata.uuid}-${params.metadata.channel}`, {
+                    wait: false,
+                    points: [
+                        {
+                            id: crypto.randomUUID(),
+                            vector: response.data.data[0].embedding,
+                            payload: {
+                                discord_id: interaction.id,
+                            },
+                        },
+                    ],
+                })
+            }
         } else {
             console.error('no starter!')
         }
