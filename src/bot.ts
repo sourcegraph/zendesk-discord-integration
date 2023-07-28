@@ -1,5 +1,6 @@
 import path from 'path'
 
+import { QdrantClient } from '@qdrant/js-client-rest'
 import axios from 'axios'
 import {
     ActionRowBuilder,
@@ -14,8 +15,24 @@ import {
     InteractionType,
     MessageType,
 } from 'discord.js'
+import dotenv from 'dotenv'
+import { Configuration, OpenAIApi } from 'openai'
 
 import { ChannelbackRequest, ClickthroughRequest, ExternalResource, Metadata } from './zendesk'
+
+dotenv.config()
+
+const qdrantClient: QdrantClient | null = process.env.QDRANT_URL
+    ? new QdrantClient({ url: process.env.QDRANT_URL })
+    : null
+
+const openaiClient: OpenAIApi | null = process.env.OPENAI_KEY
+    ? new OpenAIApi(
+          new Configuration({
+              apiKey: process.env.OPENAI_KEY,
+          })
+      )
+    : null
 
 interface BotParams {
     metadata: Metadata
@@ -38,13 +55,29 @@ export interface Bot {
      */
     clickthrough(request: ClickthroughRequest): Promise<string | null>
 
+    onUpdateParams(): Promise<void>
     destroy(): void
 }
 
-export function createBot(params: BotParams): Bot {
+export async function createBot(params: BotParams): Promise<Bot> {
     const client = new Client({
         intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
     })
+
+    async function onUpdateParams() {
+        if (qdrantClient) {
+            const collectionNames = (await qdrantClient.getCollections()).collections.map(collection => collection.name)
+            if (!collectionNames.includes(params.metadata.channel)) {
+                qdrantClient.createCollection(params.metadata.channel, {
+                    vectors: {
+                        size: 1536,
+                        distance: 'Cosine',
+                    },
+                })
+            }
+        }
+    }
+    await onUpdateParams()
 
     client.on('ready', async () => {
         console.log(`Logged in as ${client.user!.tag}!`)
@@ -96,11 +129,6 @@ export function createBot(params: BotParams): Bot {
                 .setEmoji('📚')
                 .setURL('https://docs.sourcegraph.com/'),
             new ButtonBuilder()
-                .setLabel('YouTube')
-                .setStyle(ButtonStyle.Link)
-                .setEmoji('📺')
-                .setURL('https://www.youtube.com/c/sourcegraph'),
-            new ButtonBuilder()
                 .setLabel('Status')
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('🧭')
@@ -146,6 +174,50 @@ export function createBot(params: BotParams): Bot {
                     attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
                 ),
             })
+
+            if (qdrantClient && openaiClient) {
+                const response = await openaiClient.createEmbedding({
+                    model: 'text-embedding-ada-002',
+                    input: `# ${interaction.name}
+                
+                ${starter.content}`,
+                })
+
+                const results = await qdrantClient?.search(params.metadata.channel, {
+                    vector: response.data.data[0].embedding,
+                    limit: 5,
+                })
+
+                const threads = await Promise.all(
+                    results.map(result => interaction.parent!.threads.resolve(result.payload!.discord_id as string))
+                )
+                await interaction.send({
+                    content: 'These other threads might be relevant:',
+                    components: threads
+                        .filter(_ => _ !== null)
+                        .map(thread =>
+                            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                                new ButtonBuilder()
+                                    .setLabel(thread!.name)
+                                    .setStyle(ButtonStyle.Link)
+                                    .setURL(thread!.url)
+                            )
+                        ),
+                })
+
+                qdrantClient.upsert(params.metadata.channel, {
+                    wait: false,
+                    points: [
+                        {
+                            id: crypto.randomUUID(),
+                            vector: response.data.data[0].embedding,
+                            payload: {
+                                discord_id: interaction.id,
+                            },
+                        },
+                    ],
+                })
+            }
         } else {
             console.error('no starter!')
         }
@@ -257,6 +329,7 @@ export function createBot(params: BotParams): Bot {
             }
         },
 
+        onUpdateParams,
         destroy() {
             client.destroy()
         },
