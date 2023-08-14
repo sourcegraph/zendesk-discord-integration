@@ -57,6 +57,7 @@ app.get('/manifest.json', (req, res) => {
             pull_url: `${site}/pull`,
             channelback_url: `${site}/channelback`,
             clickthrough_url: `${site}/clickthrough`,
+            event_callback_url: `${site}/event_callback`,
         },
     })
 })
@@ -250,6 +251,24 @@ app.get('/clickthrough', async (req, res) => {
     }
 
     res.status(500).send('Internal server error')
+})
+
+app.post('/event_callback', (req, res) => {
+    res.status(200).send()
+})
+
+app.post('/webhook', async (req, res) => {
+    res.status(200).send()
+
+    const tags = req.body.ticket_status_change.split(' -> ')[0].split(' ')
+    const status = req.body.ticket_status_change.split(' -> ')[1]
+
+    const threadTag = tags.find((_: any) => _.startsWith('do-not-remove-discord-'))
+    if (!threadTag) return
+
+    for (const value of bots.values()) {
+        await value.statusChange(threadTag.replace('do-not-remove-discord-', ''), status)
+    }
 })
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080

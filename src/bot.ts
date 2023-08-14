@@ -4,15 +4,14 @@ import { QdrantClient } from '@qdrant/js-client-rest'
 import axios from 'axios'
 import {
     ActionRowBuilder,
-    AnyThreadChannel,
     AttachmentBuilder,
     ButtonBuilder,
     ButtonStyle,
     ChannelType,
     Client,
-    ComponentType,
+    ForumChannel,
     GatewayIntentBits,
-    InteractionType,
+    GuildForumTag,
     MessageType,
 } from 'discord.js'
 import dotenv from 'dotenv'
@@ -55,6 +54,8 @@ export interface Bot {
      */
     clickthrough(request: ClickthroughRequest): Promise<string | null>
 
+    statusChange(threadId: string, status: string): Promise<void>
+
     onUpdateParams(): Promise<void>
     destroy(): void
 }
@@ -83,46 +84,10 @@ export async function createBot(params: BotParams): Promise<Bot> {
         console.log(`Logged in as ${client.user!.tag}!`)
     })
 
-    client.on('interactionCreate', async interaction => {
-        if (
-            interaction.type === InteractionType.MessageComponent &&
-            interaction.componentType === ComponentType.Button &&
-            interaction.customId === 'close'
-        ) {
-            const thread = interaction.message.channel as AnyThreadChannel
-
-            await interaction.update({
-                components: [createActionButtonRow('reopen')],
-            })
-
-            await thread.setArchived(true)
-        }
-
-        if (
-            interaction.type === InteractionType.MessageComponent &&
-            interaction.componentType === ComponentType.Button &&
-            interaction.customId === 'reopen'
-        ) {
-            const thread = interaction.message.channel as AnyThreadChannel
-
-            await thread.setArchived(false)
-            await interaction.update({
-                components: [createActionButtonRow('close')],
-            })
-        }
-    })
-
-    function createActionButtonRow(button: 'close' | 'reopen'): ActionRowBuilder<ButtonBuilder> {
+    function createActionButtonRow(): ActionRowBuilder<ButtonBuilder> {
         const row = new ActionRowBuilder<ButtonBuilder>()
 
         row.addComponents(
-            button === 'close'
-                ? new ButtonBuilder().setLabel('Close').setCustomId('close').setStyle(ButtonStyle.Danger).setEmoji('🔒')
-                : new ButtonBuilder()
-                      .setLabel('Reopen')
-                      .setCustomId('reopen')
-                      .setStyle(ButtonStyle.Primary)
-                      .setEmoji('🔓'),
             new ButtonBuilder()
                 .setLabel('Docs')
                 .setStyle(ButtonStyle.Link)
@@ -145,10 +110,15 @@ export async function createBot(params: BotParams): Promise<Bot> {
 
         await interaction.send({
             content: `Hey <@${interaction.ownerId}>, thanks for reaching out! The resources below might be useful to you.`,
-            components: [createActionButtonRow('close')],
+            components: [createActionButtonRow()],
         })
 
         const starter = await interaction.fetchStarterMessage()
+
+        const tagMap = new Map<string, GuildForumTag>()
+        for (const tag of (interaction.parent as ForumChannel).availableTags) {
+            tagMap.set(tag.id, tag)
+        }
 
         if (starter) {
             await params.pushExternalResource(params.metadata, {
@@ -168,6 +138,16 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     {
                         id: 'subject',
                         value: interaction.name,
+                    },
+                    {
+                        id: 'tags',
+                        value: [
+                            `do-not-remove-discord-${interaction.id}`,
+                            ...interaction.appliedTags
+                                .map(id => tagMap.get(id))
+                                .filter(_ => _)
+                                .map(_ => _?.name.replace(/ /g, '_')),
+                        ],
                     },
                 ],
                 file_urls: starter.attachments.map(
@@ -220,6 +200,39 @@ export async function createBot(params: BotParams): Promise<Bot> {
             }
         } else {
             console.error('no starter!')
+        }
+    })
+
+    client.on('threadDelete', async thread => {
+        await params.pushExternalResource(params.metadata, {
+            external_id: `${thread.id}-delete`,
+            thread_id: thread.id,
+            author: {
+                external_id: client.user!.id,
+                name: 'Discord Integration',
+                locale: 'en',
+                fields: [],
+            },
+            fields: [],
+            created_at: new Date().toISOString(),
+            message: 'Thread deleted.',
+            internal_note: false,
+            allow_channelback: false,
+        })
+
+        if (qdrantClient && openaiClient) {
+            await qdrantClient.delete(params.metadata.channel, {
+                filter: {
+                    must: [
+                        {
+                            key: thread.id,
+                            match: {
+                                value: thread.id,
+                            },
+                        },
+                    ],
+                },
+            })
         }
     })
 
@@ -326,6 +339,33 @@ export async function createBot(params: BotParams): Promise<Bot> {
                 }
 
                 return message.url
+            }
+        },
+
+        async statusChange(threadId: string, status: string): Promise<void> {
+            try {
+                const channel = await client.channels.fetch(params.metadata.channel)
+                if (channel?.type !== ChannelType.GuildForum) {
+                    return
+                }
+
+                const thread = await channel.threads.fetch(threadId)
+                if (!thread?.url) {
+                    return
+                }
+
+                if (status === 'Solved') {
+                    setTimeout(async () => {
+                        await thread.send(
+                            'This ticket has been marked as solved. If you have any other issues, feel free to open another ticket.'
+                        )
+                        await thread.setLocked(true, 'Resolved')
+                    }, 5000)
+                } else if (!thread.locked) {
+                    await thread.setLocked(false, 'Unresolved')
+                }
+            } catch (err) {
+                console.error(err)
             }
         },
 

@@ -9,6 +9,7 @@ createBot({
         uuid: 'discord-only',
         channel: process.env.DISCORD_ONLY_CHANNEL!,
         token: process.env.DISCORD_ONLY_TOKEN!,
+        subdomain: 'sourcegraph',
     },
 
     async pushExternalResource(metadata, resource) {},
