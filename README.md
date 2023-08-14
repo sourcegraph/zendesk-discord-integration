@@ -1,8 +1,24 @@
 # Zendesk Discord Integration
 
-This repository provides a Discord bot that syncs support forum posts with Zendesk tickets.
+This repository provides a Discord bot that syncs forum posts with Zendesk tickets. It's written as an internal tool for us at [Sourcegraph](https://sourcegraph.com) as Zendesk [removed official channel support for Discord](https://support.zendesk.com/hc/en-us/articles/4949877371802-Announcing-removal-of-the-Discord-integration).
 
-Please see the instructions below to get started.
+<!-- omit in toc -->
+## Table of Contents
+
+- [Zendesk Discord Integration](#zendesk-discord-integration)
+  - [Environment Variables](#environment-variables)
+    - [`SITE`](#site)
+    - [`PUSH` (optional but recommended)](#push-optional-but-recommended)
+    - [`QDRANT_URL` (optional)](#qdrant_url-optional)
+    - [`OPENAI_KEY` (optional)](#openai_key-optional)
+  - [Packaging and Uploading the App](#packaging-and-uploading-the-app)
+    - [Automatically](#automatically)
+    - [Manually](#manually)
+  - [Channel App Integration](#channel-app-integration)
+    - [Discord Token](#discord-token)
+    - [Support Channel ID](#support-channel-id)
+  - [Testing](#testing)
+  - [License](#license)
 
 ## Environment Variables
 
@@ -68,6 +84,6 @@ docker run -p 6333:6333 \
 pnpm run zendesk:deploy
 ```
 
-## Prior Art / References
+## License
 
-- https://github.com/nexmo-saleseng/zendesk-nexmo-channel-integration
+Apache-2.0
