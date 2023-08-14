@@ -20,11 +20,23 @@ Without this environment variable, messages will only be pulled from Discord app
 
 (Ignore this if this is a first setup) Note that if you enable this *after* having created some integration accounts, you'll have to edit and save them for this to kick in.
 
+### `QDRANT_URL` (optional)
+
+URL to a Qdrant database.
+
 ### `OPENAI_KEY` (optional)
 
-TODO: not implemented yet, probably requires another set of envvars pointing to a vector db
+OpenAI key for embeddings.
 
 ## Packaging and Uploading the App
+
+### Automatically
+
+Set `DEPLOY_SUBDOMAIN` to a Zendesk subdomain, for example `sourcegraph`, and `DEPLOY_AUTHORIZATION` set to [a valid Zendesk Authorization header value](https://developer.zendesk.com/api-reference/introduction/security-and-auth/#api-token).
+
+Then you can run `pnpm run zendesk:deploy` however many times you like to redeploy the app from scratch. Do this when modifying `requirements.json` or if you want manifest changes to percolate faster.
+
+### Manually
 
 Run `pnpm run zendesk:package` (with all your desired environment variables set) and upload the `zendesk-installer.zip` to `Apps and integrations > Zendesk Support apps > Private Apps`.
 
@@ -51,6 +63,9 @@ docker pull qdrant/qdrant
 docker run -p 6333:6333 \
     -v ~/.drant-data:/qdrant/storage \
     qdrant/qdrant
+
+# (Re)deploy Zendesk app
+pnpm run zendesk:deploy
 ```
 
 ## Prior Art / References
