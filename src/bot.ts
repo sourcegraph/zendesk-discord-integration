@@ -33,6 +33,8 @@ const openaiClient: OpenAIApi | null = process.env.OPENAI_KEY
       )
     : null
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(() => resolve(void {}), ms))
+
 interface BotParams {
     metadata: Metadata
     /**
@@ -108,12 +110,14 @@ export async function createBot(params: BotParams): Promise<Bot> {
             return
         }
 
+        await sleep(500)
+
+        const starter = await interaction.fetchStarterMessage()
+
         await interaction.send({
             content: `Hey <@${interaction.ownerId}>, thanks for reaching out! The resources below might be useful to you.`,
             components: [createActionButtonRow()],
         })
-
-        const starter = await interaction.fetchStarterMessage()
 
         const tagMap = new Map<string, GuildForumTag>()
         for (const tag of (interaction.parent as ForumChannel).availableTags) {
