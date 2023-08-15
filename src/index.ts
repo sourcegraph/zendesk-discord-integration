@@ -2,13 +2,14 @@ import axios from 'axios'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
 import express from 'express'
+import jwt from 'jsonwebtoken'
 
 import { Bot, createBot } from './bot'
 import { ChannelbackRequest, ExternalResource, Metadata } from './zendesk'
 
 dotenv.config()
 
-if (!process.env.SITE) {
+if (!process.env.SITE || !process.env.JWT_SECRET) {
     console.log('bad config')
     process.exit(1)
 }
@@ -27,7 +28,15 @@ app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
 app.all('/attachment/(*)', async (req, res) => {
+    if (typeof req.query.token !== 'string') {
+        res.status(403).send('Missing token')
+        return
+    }
+
     try {
+        const token = jwt.verify(req.query.token, process.env.JWT_SECRET!)
+        if (token !== req.params[0]) throw new Error('Mismatch')
+
         const { data } = await axios.get(req.params[0], {
             responseType: 'stream',
             timeout: 10_000,

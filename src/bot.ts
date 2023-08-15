@@ -15,6 +15,7 @@ import {
     MessageType,
 } from 'discord.js'
 import dotenv from 'dotenv'
+import jwt from 'jsonwebtoken'
 import { Configuration, OpenAIApi } from 'openai'
 
 import { ChannelbackRequest, ClickthroughRequest, ExternalResource, Metadata } from './zendesk'
@@ -155,7 +156,10 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     },
                 ],
                 file_urls: starter.attachments.map(
-                    attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
+                    attachment =>
+                        `${process.env.SITE!}/attachment/${encodeURIComponent(
+                            attachment.url
+                        )}?token=${encodeURIComponent(jwt.sign(attachment.url, process.env.JWT_SECRET!))}`
                 ),
             })
 
@@ -271,7 +275,10 @@ export async function createBot(params: BotParams): Promise<Bot> {
             internal_note: false,
             allow_channelback: true,
             file_urls: interaction.attachments.map(
-                attachment => `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}`
+                attachment =>
+                    `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}?token=${encodeURIComponent(
+                        jwt.sign(attachment.url, process.env.JWT_SECRET!)
+                    )}`
             ),
         })
     })
