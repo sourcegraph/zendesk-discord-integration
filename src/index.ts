@@ -11,7 +11,7 @@ import { ChannelbackRequest, ExternalResource, Metadata } from './zendesk'
 
 dotenv.config()
 
-if (!process.env.SITE || !process.env.SECRET) {
+if (!process.env.SITE || !process.env.SECRET || !process.env.PUSH) {
     console.log('bad config')
     process.exit(1)
 }
@@ -82,7 +82,7 @@ app.post('/admin', (req, res) => {
     if (
         typeof req.body !== 'object' ||
         typeof req.body.return_url !== 'string' ||
-        (typeof req.body.name && (typeof req.body.name !== 'string' || typeof req.body.metadata !== 'string'))
+        (req.body.name && typeof req.body.metadata !== 'string')
     ) {
         res.status(400).send('Bad request')
         return
@@ -123,6 +123,27 @@ app.post('/admin', (req, res) => {
     }
 })
 
+// NOTE(auguste): We need to do this as, as far as I'm aware, there's no other way
+// to verify Zendesk message provenance for the /pull and /channelback routes
+async function isTokenValid(metadata: Metadata): Promise<boolean> {
+    try {
+        await axios.post(
+            `https://${metadata.subdomain}.zendesk.com/api/v2/any_channel/validate_token`,
+            {
+                instance_push_id: metadata.instance_push_id,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${metadata.zendesk_access_token}`,
+                },
+            }
+        )
+        return true
+    } catch {
+        return false
+    }
+}
+
 /**
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/pull_endpoint/
  */
@@ -141,11 +162,17 @@ app.all('/pull', async (req, res) => {
     }
 
     if (
+        typeof metadata !== 'object' ||
         typeof metadata.uuid !== 'string' ||
         typeof metadata.token !== 'string' ||
         typeof metadata.channel !== 'string'
     ) {
         res.status(400).send('Bad request')
+        return
+    }
+
+    if (!(await isTokenValid(metadata))) {
+        res.status(403).send('Forbidden')
         return
     }
 
@@ -225,23 +252,32 @@ app.post('/channelback', async (req, res) => {
         return
     }
 
+    if (!(await isTokenValid(metadata))) {
+        res.status(403).send('Forbidden')
+        return
+    }
+
     const bot = bots.get(metadata.uuid)
     if (!bot) {
         res.status(500).send('Internal server error')
         return
     }
 
-    const externalId = await bot.channelback(req.body as ChannelbackRequest)
+    try {
+        const externalId = await bot.channelback(req.body as ChannelbackRequest)
+        if (!externalId) {
+            res.status(500).send('Internal server error')
+            return
+        }
 
-    if (!externalId) {
+        res.send({
+            external_id: externalId,
+            allow_channelback: true,
+        })
+    } catch {
         res.status(500).send('Internal server error')
         return
     }
-
-    res.send({
-        external_id: externalId,
-        allow_channelback: true,
-    })
 })
 
 /**
@@ -255,14 +291,16 @@ app.get('/clickthrough', async (req, res) => {
 
     // We don't use a Promise.all here to avoid potential rate-limiting
     for (const value of bots.values()) {
-        const location = await value.clickthrough({
-            external_id: req.query.external_id,
-        })
+        try {
+            const location = await value.clickthrough({
+                external_id: req.query.external_id,
+            })
 
-        if (location) {
-            res.redirect(location)
-            return
-        }
+            if (location) {
+                res.redirect(location)
+                return
+            }
+        } catch {}
     }
 
     res.status(500).send('Internal server error')

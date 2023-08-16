@@ -9,7 +9,7 @@ This repository provides a Discord bot that syncs forum posts with Zendesk ticke
   - [Environment Variables](#environment-variables)
     - [`SITE`](#site)
     - [`SECRET`](#secret)
-    - [`PUSH` (optional but recommended)](#push-optional-but-recommended)
+    - [`PUSH`](#push)
     - [`QDRANT_URL` (optional)](#qdrant_url-optional)
     - [`OPENAI_KEY` (optional)](#openai_key-optional)
   - [Packaging and Uploading the App](#packaging-and-uploading-the-app)
@@ -33,7 +33,9 @@ The site on which you'll be hosting the Zendesk channel server and Discord bot (
 
 A passphrase used to sign JWTs and webhooks requests.
 
-### `PUSH` (optional but recommended)
+### `PUSH`
+
+In an ideal world, this would be optional, but for security reasons it is required.
 
 The unique identifier of an OAuth client created under `Apps and integrations > APIs > Zendesk API > OAuth Clients`. Note that this is not a user authenticated interaction, so no redirect URL is required when creating this OAuth client.
 
