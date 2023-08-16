@@ -306,6 +306,10 @@ app.get('/clickthrough', async (req, res) => {
     res.status(500).send('Internal server error')
 })
 
+app.get('/healthcheck', (req, res) => {
+    res.status(200).send('OK')
+})
+
 app.post('/event_callback', (req, res) => {
     res.status(200).send()
 })
