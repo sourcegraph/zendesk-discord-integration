@@ -6,10 +6,11 @@ import { createZipStream } from './package'
 
 dotenv.config()
 const site = process.env.SITE
+const secret = process.env.SECRET
 const subdomain = process.env.DEPLOY_SUBDOMAIN
 const authorization = process.env.DEPLOY_AUTHORIZATION
 
-if (!site || !subdomain || !authorization) {
+if (!site || !secret || !subdomain || !authorization) {
     console.error('Missing env vars.')
     process.exit(1)
 }
@@ -32,7 +33,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(() => resolve(vo
     }
 
     const formData = new FormData()
-    formData.append('uploaded_data', createZipStream(site), {
+    formData.append('uploaded_data', createZipStream(site, secret), {
         contentType: 'application/zip',
         filename: 'app.zip',
     })

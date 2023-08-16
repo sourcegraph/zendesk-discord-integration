@@ -5,7 +5,7 @@ import { createWriteStream } from 'fs'
 import dotenv from 'dotenv'
 import JSZip from 'jszip'
 
-export function createZipStream(site: string) {
+export function createZipStream(site: string, secret: string) {
     const zip = new JSZip()
 
     zip.file(
@@ -32,13 +32,18 @@ export function createZipStream(site: string) {
                     manifest_url: `${site}/manifest.json`,
                 },
             },
-            targets: {
-                url_target: {
-                    title: 'URL Target',
-                    type: 'url_target',
-                    target_url: `${site}/webhook`,
-                    method: 'post',
-                    attribute: 'ticket_status_change',
+            webhooks: {
+                status_change_endpoint: {
+                    endpoint: `${site}/webhook`,
+                    http_method: 'POST',
+                    name: 'Status Changed Endpoint',
+                    request_format: 'json',
+                    status: 'active',
+                    subscriptions: ['conditional_ticket_events'],
+                    signing_secret: {
+                        algorithm: 'SHA256',
+                        secret,
+                    },
                 },
             },
             triggers: {
@@ -52,8 +57,11 @@ export function createZipStream(site: string) {
                     ],
                     actions: [
                         {
-                            field: 'notification_target',
-                            value: ['url_target', '{{ticket.tags | join: " "}} -> {{ticket.status}}'],
+                            field: 'notification_webhook',
+                            value: [
+                                'status_change_endpoint',
+                                '{"tags":"{{ticket.tags}}","status":"{{ticket.status}}"}\n',
+                            ],
                         },
                     ],
                 },
@@ -86,11 +94,12 @@ export function createZipStream(site: string) {
 if (require.main === module) {
     dotenv.config()
     const site = process.env.SITE
+    const secret = process.env.SECRET
 
-    if (!site) {
+    if (!site || !secret) {
         console.error('Site not specified in SITE .env entry/environment variable.')
         process.exit(1)
     }
 
-    createZipStream(site).pipe(createWriteStream('zendesk-installer.zip'))
+    createZipStream(site, secret).pipe(createWriteStream('zendesk-installer.zip'))
 }

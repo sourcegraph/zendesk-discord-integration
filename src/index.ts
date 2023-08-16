@@ -1,3 +1,5 @@
+import crypto from 'crypto'
+
 import axios from 'axios'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
@@ -9,7 +11,7 @@ import { ChannelbackRequest, ExternalResource, Metadata } from './zendesk'
 
 dotenv.config()
 
-if (!process.env.SITE || !process.env.JWT_SECRET) {
+if (!process.env.SITE || !process.env.SECRET) {
     console.log('bad config')
     process.exit(1)
 }
@@ -24,7 +26,9 @@ const app = express()
 let bots = new Map<string, Bot>()
 let botExternalResourceQueue = new Map<string, ExternalResource[]>()
 
-app.use(bodyParser.json())
+const rawBodySaver = (req: any, res: any, buf: Buffer, encoding: any) => (req.rawBody = buf)
+
+app.use(bodyParser.json({ verify: rawBodySaver }))
 app.use(bodyParser.urlencoded({ extended: true }))
 
 app.all('/attachment/(*)', async (req, res) => {
@@ -34,7 +38,7 @@ app.all('/attachment/(*)', async (req, res) => {
     }
 
     try {
-        const token = jwt.verify(req.query.token, process.env.JWT_SECRET!)
+        const token = jwt.verify(req.query.token, process.env.SECRET!)
         if (token !== req.params[0]) throw new Error('Mismatch')
 
         const { data } = await axios.get(req.params[0], {
@@ -76,6 +80,7 @@ app.get('/manifest.json', (req, res) => {
  */
 app.post('/admin', (req, res) => {
     if (
+        typeof req.body !== 'object' ||
         typeof req.body.return_url !== 'string' ||
         (typeof req.body.name && (typeof req.body.name !== 'string' || typeof req.body.metadata !== 'string'))
     ) {
@@ -122,7 +127,7 @@ app.post('/admin', (req, res) => {
  * @see https://developer.zendesk.com/documentation/channel_framework/understanding-the-channel-framework/pull_endpoint/
  */
 app.all('/pull', async (req, res) => {
-    if (typeof req.body.metadata !== 'string') {
+    if (typeof req.body !== 'object' || typeof req.body.metadata !== 'string') {
         res.status(400).send('Bad request')
         return
     }
@@ -194,6 +199,7 @@ app.all('/pull', async (req, res) => {
  */
 app.post('/channelback', async (req, res) => {
     if (
+        typeof req.body !== 'object' ||
         typeof req.body.message !== 'string' ||
         typeof req.body.thread_id !== 'string' ||
         typeof req.body.metadata !== 'string'
@@ -267,17 +273,44 @@ app.post('/event_callback', (req, res) => {
 })
 
 app.post('/webhook', async (req, res) => {
-    res.status(200).send()
+    const signature = req.headers['x-zendesk-webhook-signature']
+    const timestamp = req.headers['x-zendesk-webhook-signature-timestamp']
 
-    const tags = req.body.ticket_status_change.split(' -> ')[0].split(' ')
-    const status = req.body.ticket_status_change.split(' -> ')[1]
+    if (
+        !(req as any).rawBody ||
+        typeof signature !== 'string' ||
+        typeof timestamp !== 'string' ||
+        typeof req.body !== 'object' ||
+        typeof req.body.tags !== 'string' ||
+        typeof req.body.status !== 'string'
+    ) {
+        res.status(200).send()
+        return
+    }
 
-    const threadTag = tags.find((_: any) => _.startsWith('do-not-remove-discord-'))
-    if (!threadTag) return
+    const ourSignature = crypto
+        .createHmac('sha256', process.env.SECRET!)
+        .update(`${timestamp}${(req as any).rawBody.toString('utf-8')}`)
+        .digest('base64')
+
+    if (signature !== ourSignature) {
+        res.status(200).send()
+        return
+    }
+
+    const threadTag = req.body.tags.split(' ').find((_: any) => _.startsWith('do-not-remove-discord-'))
+    if (!threadTag) {
+        res.status(200).send()
+        return
+    }
 
     for (const value of bots.values()) {
-        await value.statusChange(threadTag.replace('do-not-remove-discord-', ''), status)
+        try {
+            await value.statusChange(threadTag.replace('do-not-remove-discord-', ''), req.body.status)
+        } catch {}
     }
+
+    res.status(200).send()
 })
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080

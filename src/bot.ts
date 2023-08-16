@@ -159,7 +159,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     attachment =>
                         `${process.env.SITE!}/attachment/${encodeURIComponent(
                             attachment.url
-                        )}?token=${encodeURIComponent(jwt.sign(attachment.url, process.env.JWT_SECRET!))}`
+                        )}?token=${encodeURIComponent(jwt.sign(attachment.url, process.env.SECRET!))}`
                 ),
             })
 
@@ -212,6 +212,8 @@ export async function createBot(params: BotParams): Promise<Bot> {
     })
 
     client.on('threadDelete', async thread => {
+        if (thread.locked) return
+
         await params.pushExternalResource(params.metadata, {
             external_id: `${thread.id}-delete`,
             thread_id: thread.id,
@@ -277,7 +279,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
             file_urls: interaction.attachments.map(
                 attachment =>
                     `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}?token=${encodeURIComponent(
-                        jwt.sign(attachment.url, process.env.JWT_SECRET!)
+                        jwt.sign(attachment.url, process.env.SECRET!)
                     )}`
             ),
         })
@@ -354,29 +356,25 @@ export async function createBot(params: BotParams): Promise<Bot> {
         },
 
         async statusChange(threadId: string, status: string): Promise<void> {
-            try {
-                const channel = await client.channels.fetch(params.metadata.channel)
-                if (channel?.type !== ChannelType.GuildForum) {
-                    return
-                }
+            const channel = await client.channels.fetch(params.metadata.channel)
+            if (channel?.type !== ChannelType.GuildForum) {
+                return
+            }
 
-                const thread = await channel.threads.fetch(threadId)
-                if (!thread?.url) {
-                    return
-                }
+            const thread = await channel.threads.fetch(threadId)
+            if (!thread?.url) {
+                return
+            }
 
-                if (status === 'Solved') {
-                    setTimeout(async () => {
-                        await thread.send(
-                            'This ticket has been marked as solved. If you have any other issues, feel free to open another ticket.'
-                        )
-                        await thread.setLocked(true, 'Resolved')
-                    }, 5000)
-                } else if (!thread.locked) {
-                    await thread.setLocked(false, 'Unresolved')
-                }
-            } catch (err) {
-                console.error(err)
+            if (status === 'Solved') {
+                setTimeout(async () => {
+                    await thread.send(
+                        'This ticket has been marked as solved. If you have any other issues, feel free to open another ticket.'
+                    )
+                    await thread.setLocked(true, 'Resolved')
+                }, 5000)
+            } else if (!thread.locked) {
+                await thread.setLocked(false, 'Unresolved')
             }
         },
 
