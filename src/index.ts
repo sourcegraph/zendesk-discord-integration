@@ -11,7 +11,7 @@ import { ChannelbackRequest, ExternalResource, Metadata } from './zendesk'
 
 dotenv.config()
 
-if (!process.env.SITE || !process.env.SECRET || !process.env.PUSH) {
+if (!process.env.SITE || !process.env.SIGNING_SECRET || !process.env.ZENDESK_PUSH) {
     console.log('bad config')
     process.exit(1)
 }
@@ -38,7 +38,7 @@ app.all('/attachment/(*)', async (req, res) => {
     }
 
     try {
-        const token = jwt.verify(req.query.token, process.env.SECRET!)
+        const token = jwt.verify(req.query.token, process.env.SIGNING_SECRET!)
         if (token !== req.params[0]) throw new Error('Mismatch')
 
         const { data } = await axios.get(req.params[0], {
@@ -63,8 +63,8 @@ app.get('/manifest.json', (req, res) => {
         id: site,
         author: 'Auguste Rame',
         version: 'v0.0.1',
-        channelback_files: !!process.env.PUSH,
-        push_client_id: process.env.PUSH,
+        channelback_files: !!process.env.ZENDESK_PUSH,
+        push_client_id: process.env.ZENDESK_PUSH,
         urls: {
             admin_ui: `${site}/admin`,
             pull_url: `${site}/pull`,
@@ -191,7 +191,7 @@ app.all('/pull', async (req, res) => {
             await createBot({
                 metadata,
                 async pushExternalResource(metadata: Metadata, resource: ExternalResource): Promise<void> {
-                    if (process.env.PUSH && metadata.zendesk_access_token) {
+                    if (process.env.ZENDESK_PUSH && metadata.zendesk_access_token) {
                         axios.post(
                             `https://${metadata.subdomain}.zendesk.com/api/v2/any_channel/push`,
                             {
@@ -331,7 +331,7 @@ app.post('/webhook', async (req, res) => {
     }
 
     const ourSignature = crypto
-        .createHmac('sha256', process.env.SECRET!)
+        .createHmac('sha256', process.env.SIGNING_SECRET!)
         .update(`${timestamp}${(req as any).rawBody.toString('utf-8')}`)
         .digest('base64')
 

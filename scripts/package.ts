@@ -94,7 +94,7 @@ export function createZipStream(site: string, secret: string) {
 if (require.main === module) {
     dotenv.config()
     const site = process.env.SITE
-    const secret = process.env.SECRET
+    const secret = process.env.SIGNING_SECRET
 
     if (!site || !secret) {
         console.error('Site not specified in SITE .env entry/environment variable.')

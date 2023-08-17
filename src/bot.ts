@@ -159,7 +159,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     attachment =>
                         `${process.env.SITE!}/attachment/${encodeURIComponent(
                             attachment.url
-                        )}?token=${encodeURIComponent(jwt.sign(attachment.url, process.env.SECRET!))}`
+                        )}?token=${encodeURIComponent(jwt.sign(attachment.url, process.env.SIGNING_SECRET!))}`
                 ),
             })
 
@@ -279,7 +279,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
             file_urls: interaction.attachments.map(
                 attachment =>
                     `${process.env.SITE!}/attachment/${encodeURIComponent(attachment.url)}?token=${encodeURIComponent(
-                        jwt.sign(attachment.url, process.env.SECRET!)
+                        jwt.sign(attachment.url, process.env.SIGNING_SECRET!)
                     )}`
             ),
         })

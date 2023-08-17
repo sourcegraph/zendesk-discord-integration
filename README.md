@@ -8,8 +8,8 @@ This repository provides a Discord bot that syncs forum posts with Zendesk ticke
 - [Zendesk Discord Integration](#zendesk-discord-integration)
   - [Environment Variables](#environment-variables)
     - [`SITE`](#site)
-    - [`SECRET`](#secret)
-    - [`PUSH`](#push)
+    - [`SIGNING_SECRET`](#signing_secret)
+    - [`ZENDESK_PUSH`](#zendesk_push)
     - [`QDRANT_URL` (optional)](#qdrant_url-optional)
     - [`OPENAI_KEY` (optional)](#openai_key-optional)
   - [Packaging and Uploading the App](#packaging-and-uploading-the-app)
@@ -29,11 +29,11 @@ You'll need to set the following environment variables, either in your command l
 
 The site on which you'll be hosting the Zendesk channel server and Discord bot (e.g. `SITE=https://somesubdomain.sourcegraph.com`).
 
-### `SECRET`
+### `SIGNING_SECRET`
 
 A passphrase used to sign JWTs and webhooks requests.
 
-### `PUSH`
+### `ZENDESK_PUSH`
 
 In an ideal world, this would be optional, but for security reasons it is required.
 

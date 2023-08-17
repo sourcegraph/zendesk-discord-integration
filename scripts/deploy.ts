@@ -6,7 +6,7 @@ import { createZipStream } from './package'
 
 dotenv.config()
 const site = process.env.SITE
-const secret = process.env.SECRET
+const secret = process.env.SIGNING_SECRET
 const subdomain = process.env.DEPLOY_SUBDOMAIN
 const authorization = process.env.DEPLOY_AUTHORIZATION
 
