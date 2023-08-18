@@ -19,6 +19,7 @@ This repository provides a Discord bot that syncs forum posts with Zendesk ticke
     - [Discord Token](#discord-token)
     - [Support Channel ID](#support-channel-id)
   - [Testing](#testing)
+  - [Deploying](#deploying)
   - [License](#license)
 
 ## Environment Variables
@@ -89,6 +90,22 @@ docker run -p 6333:6333 \
 
 # (Re)deploy Zendesk app
 pnpm run zendesk:deploy
+```
+
+## Deploying
+
+```bash
+# Build Docker image
+docker build -t zendesk-discord-integration .
+
+# If you're on an M1 / M2 mac
+docker buildx build --platform linux/amd64 -t zendesk-discord-integration .
+
+# Tag the image
+docker tag zendesk-discord-integration us-central1-docker.pkg.dev/cody-embeddings-discord-bot/zendesk-discord-integration/zendesk-discord-integration
+
+# Push the image
+docker push us-central1-docker.pkg.dev/cody-embeddings-discord-bot/zendesk-discord-integration/zendesk-discord-integration
 ```
 
 ## License
