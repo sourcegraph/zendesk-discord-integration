@@ -116,7 +116,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
         const starter = await interaction.fetchStarterMessage()
 
         await interaction.send({
-            content: `Hey <@${interaction.ownerId}>, thanks for reaching out! The resources below might be useful to you.`,
+            content: `Hey <@${interaction.ownerId}>, thanks for reaching out! Someone will be with you as soon as possible. In the meantime, check out the resources below that might be useful.`,
             components: [createActionButtonRow()],
         })
 
