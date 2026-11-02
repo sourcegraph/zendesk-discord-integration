@@ -16,7 +16,7 @@ import {
 } from 'discord.js'
 import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
-import { Configuration, OpenAIApi } from 'openai'
+import OpenAI from 'openai'
 
 import { ChannelbackRequest, ClickthroughRequest, ExternalResource, Metadata } from './zendesk'
 
@@ -26,12 +26,10 @@ const qdrantClient: QdrantClient | null = process.env.QDRANT_URL
     ? new QdrantClient({ url: process.env.QDRANT_URL })
     : null
 
-const openaiClient: OpenAIApi | null = process.env.OPENAI_KEY
-    ? new OpenAIApi(
-          new Configuration({
-              apiKey: process.env.OPENAI_KEY,
-          })
-      )
+const openaiClient: OpenAI | null = process.env.OPENAI_KEY
+    ? new OpenAI({
+          apiKey: process.env.OPENAI_KEY,
+      })
     : null
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(() => resolve(void {}), ms))
@@ -164,7 +162,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
             })
 
             if (qdrantClient && openaiClient) {
-                const response = await openaiClient.createEmbedding({
+                const response = await openaiClient.embeddings.create({
                     model: 'text-embedding-ada-002',
                     input: `# ${interaction.name}
                 
@@ -172,7 +170,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
                 })
 
                 const results = await qdrantClient?.search(params.metadata.channel, {
-                    vector: response.data.data[0].embedding,
+                    vector: response.data[0].embedding,
                     limit: 5,
                 })
 
@@ -198,7 +196,7 @@ export async function createBot(params: BotParams): Promise<Bot> {
                     points: [
                         {
                             id: crypto.randomUUID(),
-                            vector: response.data.data[0].embedding,
+                            vector: response.data[0].embedding,
                             payload: {
                                 discord_id: interaction.id,
                             },

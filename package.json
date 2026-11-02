@@ -17,7 +17,7 @@
     "express": "^4.18.2",
     "form-data": "^4.0.0",
     "jsonwebtoken": "^9.0.1",
-    "openai": "^3.3.0"
+    "openai": "^4.104.0"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.1.0",
